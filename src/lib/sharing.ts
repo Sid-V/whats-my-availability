@@ -34,6 +34,7 @@ function validateSharedData(data: unknown): SharedAvailabilityData | null {
 
   // name: string, bounded length, strip control characters
   if (typeof d.name !== "string") return null;
+  // eslint-disable-next-line no-control-regex
   const name = d.name.replace(/[\x00-\x1f\x7f]/g, "").slice(0, MAX_NAME_LENGTH);
 
   // tz: non-empty string

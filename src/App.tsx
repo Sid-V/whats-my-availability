@@ -14,31 +14,19 @@ function App() {
     null
   );
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [sharedData, setSharedData] = useState<SharedAvailabilityData | null>(
-    null
-  );
-
-  // Check for shared availability URL on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const d = params.get("d");
-    if (d) {
-      const decoded = decodeAvailability(d);
-      if (decoded) {
-        setSharedData(decoded);
-      } else {
-        setError("Invalid or corrupted share link.");
-      }
-    }
-  }, []);
+  const [sharedData] = useState<SharedAvailabilityData | null>(() => {
+    const d = new URLSearchParams(window.location.search).get("d");
+    return d ? decodeAvailability(d) : null;
+  });
+  const [error, setError] = useState<string | null>(() => {
+    const d = new URLSearchParams(window.location.search).get("d");
+    if (d && !decodeAvailability(d)) return "Invalid or corrupted share link.";
+    return null;
+  });
 
   // Fetch user profile and calendar when access token is set
   useEffect(() => {
     if (!accessToken) return;
-
-    setLoading(true);
-    setError(null);
 
     const fetchAll = async () => {
       // Fetch user name from Google
@@ -67,6 +55,7 @@ function App() {
       return;
     }
     setError(null);
+    setLoading(true);
     setAccessToken(token);
   };
 
