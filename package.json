@@ -1,8 +1,11 @@
 {
   "name": "whats-my-availability",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "description": "Check your Google Calendar availability for the next 5 business days and share it instantly",
+  "homepage": "https://wma.sidv.me",
+  "keywords": ["google-calendar", "availability", "scheduling", "share", "calendly", "calendar"],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
