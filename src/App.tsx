@@ -5,15 +5,28 @@ import { ShareControls } from "./components/ShareControls";
 import { getAvailability } from "./lib/calendar";
 import { getNextBusinessDays } from "./lib/dates";
 import { decodeAvailability } from "./lib/sharing";
+import {
+  loadAuth,
+  saveAuth,
+  clearAuth,
+  updateAuthUserName,
+  getSavedEmail,
+} from "./lib/auth";
 import type { DayAvailability, SharedAvailabilityData } from "./lib/types";
 
 function App() {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string>("");
+  const [accessToken, setAccessToken] = useState<string | null>(() => {
+    const stored = loadAuth();
+    return stored ? stored.accessToken : null;
+  });
+  const [userName, setUserName] = useState<string>(() => {
+    const stored = loadAuth();
+    return stored?.userName || "";
+  });
   const [availability, setAvailability] = useState<DayAvailability[] | null>(
     null
   );
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => !!loadAuth());
   const [sharedData] = useState<SharedAvailabilityData | null>(() => {
     const d = new URLSearchParams(window.location.search).get("d");
     return d ? decodeAvailability(d) : null;
@@ -29,14 +42,19 @@ function App() {
     if (!accessToken) return;
 
     const fetchAll = async () => {
-      // Fetch user name from Google
-      const profileRes = await fetch(
-        "https://www.googleapis.com/oauth2/v3/userinfo",
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      if (profileRes.ok) {
-        const profile = await profileRes.json();
-        setUserName(profile.given_name || profile.name || "");
+      // Skip profile fetch if we already have the name from storage
+      if (!userName) {
+        const profileRes = await fetch(
+          "https://www.googleapis.com/oauth2/v3/userinfo",
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          const name = profile.given_name || profile.name || "";
+          const email = profile.email || "";
+          setUserName(name);
+          updateAuthUserName(name, email);
+        }
       }
 
       const businessDays = getNextBusinessDays(5);
@@ -45,17 +63,22 @@ function App() {
     };
 
     fetchAll()
-      .catch((err: Error) => setError(err.message))
+      .catch((err: Error) => {
+        clearAuth();
+        setAccessToken(null);
+        setError(err.message);
+      })
       .finally(() => setLoading(false));
   }, [accessToken]);
 
-  const handleToken = (token: string) => {
+  const handleToken = (token: string, expiresIn: number) => {
     if (!token) {
       setError("Sign-in failed. Calendar access is required.");
       return;
     }
     setError(null);
     setLoading(true);
+    saveAuth(token, expiresIn, "", "");
     setAccessToken(token);
   };
 
@@ -72,7 +95,11 @@ function App() {
   if (!accessToken) {
     return (
       <div className="container">
-        <SignIn onToken={handleToken} error={error} />
+        <SignIn
+          onToken={handleToken}
+          error={error}
+          loginHint={getSavedEmail() ?? undefined}
+        />
       </div>
     );
   }
@@ -91,7 +118,13 @@ function App() {
     return (
       <div className="container">
         <p className="error">{error}</p>
-        <button onClick={() => setAccessToken(null)} className="btn">
+        <button
+          onClick={() => {
+            clearAuth();
+            setAccessToken(null);
+          }}
+          className="btn"
+        >
           Try Again
         </button>
       </div>
