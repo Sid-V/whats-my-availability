@@ -10,7 +10,8 @@ export function SignIn({ onToken, error }: SignInProps) {
     onSuccess: (response) => onToken(response.access_token),
     onError: () =>
       onToken(""), // triggers error handling in App
-    scope: "https://www.googleapis.com/auth/calendar.freebusy",
+    scope:
+      "https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   });
 
   return (

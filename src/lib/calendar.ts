@@ -1,12 +1,60 @@
 import type { BusyPeriod, DayAvailability, TimeSlot } from "./types";
 
 const FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy";
+const CALENDAR_LIST_URL =
+  "https://www.googleapis.com/calendar/v3/users/me/calendarList";
+
+// Holiday and birthday calendars use well-known prefixes
+const EXCLUDED_PREFIXES = [
+  "#contacts@group.v.calendar.google.com",  // birthdays
+  "#holiday@group.v.calendar.google.com",   // holidays
+  "en.holidays",                             // regional holidays (e.g. en.usa#holiday)
+];
+
+function isExcludedCalendar(id: string): boolean {
+  return EXCLUDED_PREFIXES.some(
+    (prefix) => id.includes(prefix) || id.startsWith(prefix)
+  );
+}
+
+async function fetchCalendarIds(accessToken: string): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const url = new URL(CALENDAR_LIST_URL);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("Session expired. Please sign in again.");
+      }
+      throw new Error(`Calendar list API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    for (const cal of data.items ?? []) {
+      if (!isExcludedCalendar(cal.id)) {
+        ids.push(cal.id);
+      }
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return ids;
+}
 
 export async function fetchBusyPeriods(
   accessToken: string,
   timeMin: string,
   timeMax: string
 ): Promise<BusyPeriod[]> {
+  const calendarIds = await fetchCalendarIds(accessToken);
+
   const response = await fetch(FREEBUSY_URL, {
     method: "POST",
     headers: {
@@ -17,7 +65,7 @@ export async function fetchBusyPeriods(
       timeMin,
       timeMax,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      items: [{ id: "primary" }],
+      items: calendarIds.map((id) => ({ id })),
     }),
   });
 
@@ -29,7 +77,12 @@ export async function fetchBusyPeriods(
   }
 
   const data = await response.json();
-  return data.calendars.primary.busy;
+  const allBusy: BusyPeriod[] = [];
+  for (const calId of Object.keys(data.calendars ?? {})) {
+    const periods: BusyPeriod[] = data.calendars[calId].busy ?? [];
+    allBusy.push(...periods);
+  }
+  return allBusy;
 }
 
 export function computeAvailableSlots(
